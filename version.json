@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 7,
   "url": "DailyVault.html",
-  "notes": "Softer glow on date boxes."
+  "notes": "Flip clock now flips like a real flip clock when the hour or minute changes."
 }
