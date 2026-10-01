@@ -5,7 +5,7 @@
 
 <script>
 /* ---- DailyVault updater: boot loader (runs before the app) ---- */
-var DV_VERSION=2; /* version of THIS file. Bump it for every release. */
+var DV_VERSION=4; /* version of THIS file. Bump it for every release. */
 (function(){
 if(window.__dvLoaded)return;
 try{
@@ -227,6 +227,12 @@ main{max-width:1280px;margin:0 auto;padding:28px 20px 60px}
 .cell.today{border-color:var(--acc);background:linear-gradient(160deg,color-mix(in srgb,var(--acc) 28%,transparent),color-mix(in srgb,var(--acc) 6%,transparent));box-shadow:0 0 0 1px var(--acc),0 0 22px -4px var(--glow)}
 .cell.today .daynum{color:var(--acc);font-weight:800}
 [data-theme="beach"] .cell.today .daynum{color:#0f8b83}
+/* stronger date-box glow (beats per-day inline colours) */
+.cell.today{box-shadow:0 0 0 1px var(--acc),0 0 26px 2px var(--glow)!important;filter:drop-shadow(0 0 8px color-mix(in srgb,var(--acc) 55%,transparent))}
+.cell:hover{box-shadow:0 10px 22px -8px rgba(0,0,0,.7),0 0 0 1px var(--acc),0 0 20px var(--glow)!important;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--acc) 45%,transparent))}
+/* v4: brighter glow, not covered by neighbouring cells */
+.cell.today{z-index:3;border-color:var(--acc)!important;box-shadow:0 0 0 2px var(--acc),0 0 30px 6px color-mix(in srgb,var(--acc) 65%,transparent)!important;filter:drop-shadow(0 0 14px var(--acc))}
+.cell:hover{z-index:4;box-shadow:0 0 0 2px var(--acc),0 0 24px 4px color-mix(in srgb,var(--acc) 55%,transparent),0 12px 22px -8px rgba(0,0,0,.7)!important;filter:drop-shadow(0 0 10px var(--acc))}
 </style></head><body>
 <div id="app"></div>
 <script>
