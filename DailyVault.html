@@ -5,7 +5,7 @@
 
 <script>
 /* ---- DailyVault updater: boot loader (runs before the app) ---- */
-var DV_VERSION=4; /* version of THIS file. Bump it for every release. */
+var DV_VERSION=5; /* version of THIS file. Bump it for every release. */
 (function(){
 if(window.__dvLoaded)return;
 try{
@@ -233,6 +233,9 @@ main{max-width:1280px;margin:0 auto;padding:28px 20px 60px}
 /* v4: brighter glow, not covered by neighbouring cells */
 .cell.today{z-index:3;border-color:var(--acc)!important;box-shadow:0 0 0 2px var(--acc),0 0 30px 6px color-mix(in srgb,var(--acc) 65%,transparent)!important;filter:drop-shadow(0 0 14px var(--acc))}
 .cell:hover{z-index:4;box-shadow:0 0 0 2px var(--acc),0 0 24px 4px color-mix(in srgb,var(--acc) 55%,transparent),0 12px 22px -8px rgba(0,0,0,.7)!important;filter:drop-shadow(0 0 10px var(--acc))}
+/* v5: softer glow */
+.cell.today{box-shadow:0 0 0 1.5px var(--acc),0 0 20px 2px color-mix(in srgb,var(--acc) 40%,transparent)!important;filter:drop-shadow(0 0 7px color-mix(in srgb,var(--acc) 50%,transparent))}
+.cell:hover{box-shadow:0 0 0 1.5px var(--acc),0 0 16px 2px color-mix(in srgb,var(--acc) 32%,transparent),0 12px 22px -8px rgba(0,0,0,.7)!important;filter:drop-shadow(0 0 5px color-mix(in srgb,var(--acc) 40%,transparent))}
 </style></head><body>
 <div id="app"></div>
 <script>
