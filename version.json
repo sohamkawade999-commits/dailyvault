@@ -1,5 +1,1 @@
-{
-  "version": 7,
-  "url": "DailyVault.html",
-  "notes": "Flip clock now flips like a real flip clock when the hour or minute changes."
-}
+{ "version": 8, "url": "DailyVault.html", "sha256": "af6c03c8c340cb694818675ee290702d32102f50a2234ff3bad5a3c515357700", "notes": "Fixed Lock losing last change, backup reminders and safer import, update checksum required, image limits, system notifications" }

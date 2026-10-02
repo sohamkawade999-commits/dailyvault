@@ -5,7 +5,7 @@
 
 <script>
 /* ---- DailyVault updater: boot loader (runs before the app) ---- */
-var DV_VERSION=7; /* version of THIS file. Bump it for every release. */
+var DV_VERSION=8; /* version of THIS file. Bump it for every release. */
 (function(){
 if(window.__dvLoaded)return;
 try{
@@ -270,7 +270,7 @@ const $=s=>document.querySelector(s),app=$('#app');
 const COLORS=['#1e3a8a','#d97706','#059669','#7c3aed','#e11d48','#0891b2','#be185d','#65a30d','#ea580c','#475569'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-let db,S={days:{}},view=new Date(),sel=null,saveT,userName='',schedEditId=null,currentTheme='dark',currentDateFont='simple',page=null,pendingSchedDel=null,pendingBdayDel=null,calBoxH=null,sessionKey=null;
+let db,S={days:{}},view=new Date(),sel=null,saveT,userName='',schedEditId=null,currentTheme='dark',currentDateFont='simple',page=null,pendingSchedDel=null,pendingBdayDel=null,calBoxH=null,sessionKey=null,sysNotifOn=true;
 function setTheme(t){
 currentTheme=t;
 document.documentElement.setAttribute('data-theme',t);
@@ -296,10 +296,9 @@ mem[k]=v;
 if(mode==='idb'){try{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=t.onerror=t.onabort=()=>res();return}catch(e){}}
 if(mode==='ls'){try{localStorage.setItem('pd_'+k,JSON.stringify(v))}catch(e){}}
 res()});
-const save=()=>{clearTimeout(saveT);saveT=setTimeout(async()=>{
-if(sessionKey){try{put('data',await encryptJSON(sessionKey,S));return}catch(e){}}
-put('data',S);
-},250)};
+const writeNow=async()=>{if(!sessionKey)return;try{await put('data',await encryptJSON(sessionKey,S))}catch(e){try{showNotifStack(['⚠️ Could not save your last change.'])}catch(e2){}}};
+const save=()=>{clearTimeout(saveT);saveT=setTimeout(()=>{saveT=null;writeNow()},250)};
+async function flushSave(){if(saveT){clearTimeout(saveT);saveT=null;await writeNow()}}
 /* legacy (v1) password hashing — kept only to verify + upgrade old unencrypted profiles */
 async function hash(pw,salt){
 try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+pw));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
@@ -341,6 +340,7 @@ ${prof?'':'<p><input type="password" id="p2" placeholder="Confirm password" auto
 const err=m=>$('#e').textContent=m;
 const go=async()=>{
 try{
+try{if(sysNotifOn&&'Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}
 const pw=$('#p').value;
 if(prof){
 if(prof.check){
@@ -350,7 +350,7 @@ await decryptJSON(sessionKey,prof.check);
 }catch(e){sessionKey=null;return err('Wrong password. Try again.')}
 const raw=await get('data');
 if(raw&&typeof raw==='object'&&typeof raw.iv==='string'&&typeof raw.ct==='string'){
-try{S=await decryptJSON(sessionKey,raw)}catch(e){return err('Could not read your data with this password.')}
+try{S=await decryptJSON(sessionKey,raw)}catch(e){sessionKey=null;return err('Could not read your data with this password.')}
 }else{
 /* recovers from an upgrade that was interrupted after the profile was re-keyed but before the data finished re-encrypting: the password check above already succeeded, so trust this plain data and encrypt it properly now */
 S=raw||{days:{}};
@@ -383,6 +383,7 @@ S.birthdays=S.birthdays||[];
 sel=null;view=new Date();render();
 checkSchedNotifications();
 checkBirthdayNotifications();
+checkBackupHealth();
 }catch(e){err('Something went wrong: '+e.message)}
 };
 $('#go').onclick=go;
@@ -463,6 +464,7 @@ const header=()=>`<header><div class="row" style="gap:14px"><b>DailyVault</b><sp
 <input type="file" id="importfile" accept="application/json" style="display:none">
 <button id="resetpw">Reset password</button>
 <button id="birthdays">Birthdays</button>
+<button id="sysnotif">System notifications: ${sysNotifOn?'On':'Off'}</button>
 <button id="checkupdate">Check for updates</button>
 <span class="mute">Version ${DV_VERSION} · ● Saved on this device</span>
 <button id="lock" class="danger">Lock</button>
@@ -540,7 +542,8 @@ if(u.protocol!=='https:'||u.host!==base.host)throw new Error('Update file must c
 const h=await fetch(u.href,{cache:'no-store'});
 if(!h.ok)throw new Error('Download failed ('+h.status+')');
 const html=await h.text();
-if(m.sha256&&(await sha256(html))!==String(m.sha256).toLowerCase())throw new Error('Download is corrupted (checksum mismatch)');
+if(!m.sha256||!/^[0-9a-f]{64}$/i.test(String(m.sha256)))throw new Error('This update has no valid checksum, so it was not installed');
+if((await sha256(html))!==String(m.sha256).toLowerCase())throw new Error('Download is corrupted (checksum mismatch)');
 if(!html.includes('DV_VERSION')||!html.includes('DailyVault'))throw new Error('File does not look like a DailyVault build');
 const vm=html.match(/var DV_VERSION=(\d+)/);
 if(!vm||Number(vm[1])!==Number(m.version))throw new Error('Version in file does not match version.json');
@@ -560,26 +563,59 @@ const p=$('#menupanel');if(p)p.classList.add('hidden');
 $('#menubtn')?.setAttribute('aria-expanded','false');
 document.querySelectorAll('.cdrop-list').forEach(l=>{l.classList.add('hidden');const b=l.previousElementSibling;if(b)b.setAttribute('aria-expanded','false')});
 }
-async function exportData(){
+async function downloadBackup(prefix){
 const profile=await get('profile');
 const data=await get('data');
 const payload={app:'DailyVault',version:2,encrypted:true,exportedAt:new Date().toISOString(),profile,data};
 const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
 const url=URL.createObjectURL(blob);
 const a=document.createElement('a');
-a.href=url;a.download=`dailyvault-backup-${key(new Date())}.json`;
+a.href=url;a.download=`${prefix}${key(new Date())}.json`;
 document.body.appendChild(a);a.click();a.remove();
 URL.revokeObjectURL(url);
+}
+async function exportData(){
+await flushSave();
+await downloadBackup('dailyvault-backup-');
+try{await put('lastBackup',Date.now())}catch(e){}
+}
+function validBackup(p){
+if(!p||typeof p!=='object'||!p.data||typeof p.data!=='object')return 'This file is not a valid DailyVault backup.';
+const d=p.data;
+if(typeof d.iv==='string'||typeof d.ct==='string'){
+if(typeof d.iv!=='string'||typeof d.ct!=='string')return 'The backup data is incomplete.';
+try{unb64(d.iv);unb64(d.ct)}catch(e){return 'The backup data is damaged.'}
+}else if(p.encrypted||typeof d.days!=='object'||!d.days)return 'The backup data is incomplete.';
+if(p.profile!==undefined&&p.profile!==null&&(typeof p.profile!=='object'||typeof p.profile.salt!=='string'))return 'The backup profile is damaged.';
+return '';
+}
+async function checkBackupHealth(){
+const msgs=[];
+if(mode==='mem')msgs.push('⚠️ Storage unavailable: data will be lost when the app closes. Export a backup.');
+try{
+const has=Object.keys(S.days||{}).length||(S.schedule||[]).length||(S.birthdays||[]).length;
+const today=key(new Date());
+if(has&&(await get('backupRemindDay'))!==today){
+const last=await get('lastBackup'),age=last?Math.floor((Date.now()-last)/86400000):null;
+if(age===null)msgs.push('💾 No backup yet. Menu → Export backup.');
+else if(age>=30)msgs.push(`💾 Last backup was ${age} days ago. Menu → Export backup.`);
+if(age===null||age>=30)await put('backupRemindDay',today);
+}
+}catch(e){}
+if(msgs.length)showNotifStack(msgs);
 }
 function importDataFile(e){
 const file=e.target.files[0];if(!file)return;
 const reader=new FileReader();
 reader.onload=async()=>{
 try{
-const payload=JSON.parse(reader.result);
-if(!payload||!payload.data)throw new Error('This file is not a valid DailyVault backup.');
-const msg=payload.encrypted?'This will replace all current data on this device with the contents of this backup. You will need the password that backup was made with to open it afterwards. Continue?':'This will replace all current data on this device with the contents of this backup. Continue?';
+let payload;try{payload=JSON.parse(reader.result)}catch(e2){throw new Error('This file is not a valid DailyVault backup.')}
+const bad=validBackup(payload);if(bad)throw new Error(bad);
+const msg=(payload.encrypted?'This will replace all current data on this device with the contents of this backup. You will need the password that backup was made with to open it afterwards.':'This will replace all current data on this device with the contents of this backup.')+' A safety copy of your current data will be downloaded first. Continue?';
 if(!confirm(msg))return;
+await flushSave();
+try{if(await get('data'))await downloadBackup('dailyvault-before-import-')}catch(e2){}
+sessionKey=null;clearTimeout(saveT);saveT=null;
 if(payload.profile)await put('profile',payload.profile);
 await put('data',payload.data);
 alert('Backup restored. Reloading now.');
@@ -595,8 +631,9 @@ updateClock();
 placeNotif();
 $('#clock').onclick=openFullClock;
 $('#menubtn').onclick=e=>{e.stopPropagation();toggleMenu()};
-$('#lock').onclick=()=>{closeMenu();sessionKey=null;S={days:{}};authScreen()};
+$('#lock').onclick=async()=>{closeMenu();await flushSave();sessionKey=null;S={days:{}};authScreen()};
 $('#resetpw').onclick=()=>{closeMenu();openResetPassword()};
+$('#sysnotif').onclick=async()=>{sysNotifOn=!sysNotifOn;await put('sysNotif',sysNotifOn?'on':'off');$('#sysnotif').textContent='System notifications: '+(sysNotifOn?'On':'Off');if(sysNotifOn){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}};
 $('#birthdays').onclick=()=>{closeMenu();pendingBdayDel=null;openBirthdays()};
 $('#checkupdate').onclick=()=>{closeMenu();updModal(`<p>This will connect to the internet to look for a new version.</p><p class="mute">Your planner data is not sent anywhere.</p><div class="row sp"><button id="uc">Cancel</button><button class="primary" id="uok">Continue</button></div>`);$('#uc').onclick=closeModal;$('#uok').onclick=checkForUpdates};
 $('#exportdata').onclick=()=>{closeMenu();exportData()};
@@ -861,7 +898,19 @@ inp.onblur=commit;
 });
 $('#note').oninput=e=>{v.note=e.target.value;save()};
 $('#pick').onclick=()=>$('#f').click();
-$('#f').onchange=async e=>{for(const f of e.target.files)v.imgs.push(await shrink(f));save();dayView()};
+$('#f').onchange=async e=>{
+const MAXI=10;let skipped=0,failed=0;
+for(const f of e.target.files){
+if(v.imgs.length>=MAXI){skipped++;continue}
+try{v.imgs.push(await shrink(f))}catch(err){failed++}
+}
+save();dayView();
+const msgs=[],mb=imgMB();
+if(skipped)msgs.push(`🖼️ Max ${MAXI} images per day. ${skipped} not added.`);
+if(failed)msgs.push(`⚠️ ${failed} file(s) could not be read as images.`);
+if(mb>=25)msgs.push(`🖼️ Images use ${Math.round(mb)} MB. Saving may slow down; remove old ones.`);
+if(msgs.length)showNotifStack(msgs);
+};
 document.querySelectorAll('[data-ri]').forEach(b=>b.onclick=()=>{
 const i=+b.dataset.ri;
 showModal(`<h3>Delete this image?</h3><img src="${v.imgs[i]}" alt="" style="height:90px;border-radius:10px;border:1px solid var(--line);margin-bottom:10px"><p class="mute">This permanently removes the image from this day. This cannot be undone.</p><div class="row sp" style="margin-top:14px"><button id="ric">Cancel</button><button class="danger" id="rid">Delete image</button></div>`);
@@ -905,6 +954,7 @@ window.addEventListener('touchmove',move,{passive:true});window.addEventListener
 $('#hcancel').onclick=closeModal;
 $('#happly').onclick=()=>{v.color=curHex;save();closeModal();dayView()};
 }
+function imgMB(){return Object.values(S.days||{}).reduce((n,d)=>n+(d.imgs||[]).reduce((m,x)=>m+x.length,0),0)/1048576}
 async function shrink(file){
 const bmp=await createImageBitmap(file),r=Math.min(1,1200/Math.max(bmp.width,bmp.height));
 const c=document.createElement('canvas');c.width=bmp.width*r;c.height=bmp.height*r;
@@ -974,7 +1024,7 @@ msgs.push(`🎂 <b>${esc(b.name)}</b>'s birthday is ${when} (turning ${age})`);
 }
 });
 if(changed)save();
-if(msgs.length)showNotifStack(msgs);
+if(msgs.length){showNotifStack(msgs);sysNotify(msgs)}
 }
 function checkSchedNotifications(){
 S.schedule=S.schedule||[];
@@ -993,7 +1043,14 @@ msgs.push(`${it.type==='work'?'💼':'📅'} <b>${esc(it.title)}</b> is schedule
 }
 });
 if(changed)save();
-if(msgs.length)showNotifStack(msgs);
+if(msgs.length){showNotifStack(msgs);sysNotify(msgs)}
+}
+function sysNotify(msgs){
+if(!sysNotifOn)return;
+try{
+if(!('Notification' in window)||Notification.permission!=='granted')return;
+msgs.forEach(m=>{try{new Notification('DailyVault',{body:new DOMParser().parseFromString(String(m),'text/html').body.textContent})}catch(e){}});
+}catch(e){}
 }
 let notifBox=null;
 function placeNotif(){
@@ -1021,12 +1078,16 @@ if(!e.target.closest('.cdrop'))document.querySelectorAll('.cdrop-list').forEach(
 /* ---- Auto-lock after 5 minutes of inactivity (same as the Lock button) ---- */
 const IDLE_LOCK_MS=5*60*1000;let lastActivity=Date.now();
 ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(ev=>document.addEventListener(ev,()=>{lastActivity=Date.now()},{passive:true,capture:true}));
-setInterval(()=>{
+setInterval(async()=>{
 if(!document.getElementById('lock'))return;
 if(Date.now()-lastActivity<IDLE_LOCK_MS)return;
 closeModal();if(notifBox)notifBox.innerHTML='';
+await flushSave();
 sessionKey=null;S={days:{}};authScreen();openFullClock();
 },10000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushSave()});
+/* re-check reminders every 30 min while unlocked (covers a day change); each reminder is only shown once per day */
+setInterval(()=>{if(!document.getElementById('lock'))return;checkSchedNotifications();checkBirthdayNotifications()},30*60*1000);
 (async()=>{
 try{db=await idb();mode='idb'}catch(e){try{localStorage.setItem('pd_t','1');localStorage.removeItem('pd_t');mode='ls'}catch(e2){mode='mem'}}
 if((await get('wipeVersion'))!=='v1'){
@@ -1036,6 +1097,7 @@ await put('wipeVersion','v1');
 }
 currentTheme=(await get('theme'))||'dark';
 document.documentElement.setAttribute('data-theme',currentTheme);
+sysNotifOn=(await get('sysNotif'))!=='off';
 currentDateFont=(await get('dateFont'))||'simple';
 document.documentElement.setAttribute('data-datefont',currentDateFont);
 authScreen();
