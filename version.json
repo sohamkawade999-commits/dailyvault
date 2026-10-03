@@ -1,1 +1,1 @@
-{ "version": 16, "url": "DailyVault.html", "notes": "Expenses and Gains brackets now show the amount for the selected day (Today when on today)" }
+{ "version": 20, "url": "DailyVault.html", "notes": "Expense and Gain lists show only entries of the selected date; top boxes still total the selected range" }

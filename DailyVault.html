@@ -5,7 +5,7 @@
 
 <script>
 /* ---- DailyVault updater: boot loader (runs before the app) ---- */
-var DV_VERSION=16; /* version of THIS file. Bump it for every release. */
+var DV_VERSION=20; /* version of THIS file. Bump it for every release. */
 (function(){
 if(window.__dvLoaded)return;
 try{
@@ -829,9 +829,10 @@ const back=n=>key(new Date(Y,M-1,D-n));
 const to=key(new Date(Y,M-1,D));
 const isToday=to===key(new Date());
 if(payRange==='day')return{from:to,to,label:isToday?'Today':'Selected day'};
-if(payRange==='week')return{from:back(6),to,label:isToday?'Last 7 days':'7 days up to selected date'};
-if(payRange==='month')return{from:back(29),to,label:isToday?'Last 30 days':'30 days up to selected date'};
-if(payRange==='year')return{from:back(364),to,label:isToday?'Last 365 days':'365 days up to selected date'};
+const nowD=new Date(),tk=key(nowD),backT=n=>key(new Date(nowD.getFullYear(),nowD.getMonth(),nowD.getDate()-n));
+if(payRange==='week')return{from:backT(6),to:tk,label:'Last 7 days'};
+if(payRange==='month')return{from:backT(29),to:tk,label:'Last 30 days'};
+if(payRange==='year')return{from:backT(364),to:tk,label:'Last 365 days'};
 let f=payFrom||back(29),e=payTo||to;if(f>e){const x=f;f=e;e=x}
 return{from:f,to:e,label:'Custom range'};
 }
@@ -843,7 +844,8 @@ const fd=ds=>new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',
 const C=currentTheme==='beach'?{g:'#1f8f52',e:'#c73a2f'}:{g:'#7fd694',e:'#f0665a'};
 const gather=f=>{const out=[];Object.keys(S.days).forEach(k=>{if(k<from||k>to)return;(S.days[k][f]||[]).slice().reverse().forEach(e=>out.push({k,e}))});return out.sort((a,b)=>a.k<b.k?1:a.k>b.k?-1:0)};
 const exps=gather('exp'),gains=gather('gain');
-const tdv=S.days[anchor]||{};const dayTag=anchor===key(new Date())?'Today':new Date(anchor+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+const dayExps=exps.filter(x=>x.k===anchor),dayGains=gains.filter(x=>x.k===anchor);
+const tdv=S.days[anchor]||{};const dayTag=anchor===key(new Date())?'Today':new Date(anchor+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 const todayE=Math.round((tdv.exp||[]).reduce((t,e)=>t+e.a,0)*100)/100,todayG=Math.round((tdv.gain||[]).reduce((t,e)=>t+e.a,0)*100)/100;
 const r2=n=>Math.round(n*100)/100;
 const sumE=r2(exps.reduce((t,x)=>t+x.e.a,0)),sumG=r2(gains.reduce((t,x)=>t+x.e.a,0)),grand=r2(sumG-sumE);
@@ -859,12 +861,12 @@ $('#m').innerHTML=`<div class="row sp" style="margin-bottom:16px;flex-wrap:wrap;
 <p class="mute" style="margin:12px 0 0;font-size:13px">${label}: ${rangeText}</p>
 <div class="pay-stats"><div class="pay-stat"><span class="mute">Gains total</span><strong style="color:${C.g}">${money(sumG)}</strong></div><div class="pay-stat"><span class="mute">Expenses total</span><strong style="color:${C.e}">${money(sumE)}</strong></div><div class="pay-stat"><span class="mute">Grand total (gains minus expenses)</span><strong style="color:${grand<0?C.e:C.g}">${moneyS(grand)}</strong></div></div></section>
 <div class="pay-cols" style="margin-bottom:20px">
-<section class="card" style="margin-bottom:0"><h2 style="font-size:20px;margin-bottom:14px">Expenses <span id="todayE" title="Total for the selected day" style="font-size:16px;font-weight:600;color:${C.e}">(${dayTag} ${money(todayE)})</span></h2>${form('x','What did you spend it on?','Add expense')}
-<h3 style="font-size:15px;margin:0 0 10px">${exps.length} in this range</h3>
-<div class="prio-list pay-list">${exps.map(x=>row(x,'data-xdel',C.e)).join('')||'<p class="mute">No expenses in this range.</p>'}</div></section>
-<section class="card" style="margin-bottom:0"><h2 style="font-size:20px;margin-bottom:14px">Gains <span id="todayG" title="Total for the selected day" style="font-size:16px;font-weight:600;color:${C.g}">(${dayTag} ${money(todayG)})</span></h2>${form('g','Where did it come from?','Add gain')}
-<h3 style="font-size:15px;margin:0 0 10px">${gains.length} in this range</h3>
-<div class="prio-list pay-list">${gains.map(x=>row(x,'data-gdel',C.g)).join('')||'<p class="mute">No gains in this range.</p>'}</div></section></div>`;
+<section class="card" style="margin-bottom:0"><h2 style="font-size:20px;margin-bottom:14px">Expenses <span id="todayE" title="Total for the selected date" style="font-size:16px;font-weight:600;color:${C.e}">(${dayTag} ${money(todayE)})</span></h2>${form('x','What did you spend it on?','Add expense')}
+<h3 style="font-size:15px;margin:0 0 10px">${dayExps.length} on this date</h3>
+<div class="prio-list pay-list">${dayExps.map(x=>row(x,'data-xdel',C.e)).join('')||'<p class="mute">No expenses on this date.</p>'}</div></section>
+<section class="card" style="margin-bottom:0"><h2 style="font-size:20px;margin-bottom:14px">Gains <span id="todayG" title="Total for the selected date" style="font-size:16px;font-weight:600;color:${C.g}">(${dayTag} ${money(todayG)})</span></h2>${form('g','Where did it come from?','Add gain')}
+<h3 style="font-size:15px;margin:0 0 10px">${dayGains.length} on this date</h3>
+<div class="prio-list pay-list">${dayGains.map(x=>row(x,'data-gdel',C.g)).join('')||'<p class="mute">No gains on this date.</p>'}</div></section></div>`;
 document.querySelectorAll('.pay-list').forEach((el,i)=>{if(kept[i])el.scrollTop=kept[i]});
 $('#xback').onclick=()=>{expDate=null;window.scrollTo({top:0,behavior:'auto'});render()};
 const [aY,aM,aD]=anchor.split('-').map(Number);
