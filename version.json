@@ -1,5 +1,1 @@
-{
-  "version": 14,
-  "url": "DailyVault.html",
-  "notes": "Payment history: Expenses and Gains headings now show today's total in brackets."
-}
+{ "version": 16, "url": "DailyVault.html", "notes": "Expenses and Gains brackets now show the amount for the selected day (Today when on today)" }
