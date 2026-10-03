@@ -5,7 +5,7 @@
 
 <script>
 /* ---- DailyVault updater: boot loader (runs before the app) ---- */
-var DV_VERSION=8; /* version of THIS file. Bump it for every release. */
+var DV_VERSION=14; /* version of THIS file. Bump it for every release. */
 (function(){
 if(window.__dvLoaded)return;
 try{
@@ -52,7 +52,7 @@ select option{background:#1c0e0f;color:#f3e6d0}
 [data-plvl]{padding-right:22px;background-position:right 6px center;background-size:9px}
 /* icon color polish, no size/shape/behavior changes */
 #pv,#nx,#pd,#nd{color:#e3c777}
-button[data-del],button[data-ri],.img button{color:#f0958c}
+button[data-del],button[data-xdel],button[data-gdel],button[data-ri],.img button{color:#f0958c}
 .sun{filter:saturate(1.15)}
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;display:flex;justify-content:space-between;align-items:center;padding:10px 24px;background:linear-gradient(rgba(9,3,3,.88),rgba(20,8,8,.88));-webkit-backdrop-filter:var(--glass);backdrop-filter:var(--glass);border-bottom:1px solid rgba(212,175,55,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 4px 16px rgba(0,0,0,.5);transform:translateZ(0);-webkit-transform:translateZ(0);will-change:transform}
 .menu-wrap{position:relative}
@@ -263,6 +263,13 @@ main{max-width:1280px;margin:0 auto;padding:28px 20px 60px}
 /* v5: softer glow */
 .cell.today{box-shadow:0 0 0 1.5px var(--acc),0 0 20px 2px color-mix(in srgb,var(--acc) 40%,transparent)!important;filter:drop-shadow(0 0 7px color-mix(in srgb,var(--acc) 50%,transparent))}
 .cell:hover{box-shadow:0 0 0 1.5px var(--acc),0 0 16px 2px color-mix(in srgb,var(--acc) 32%,transparent),0 12px 22px -8px rgba(0,0,0,.7)!important;filter:drop-shadow(0 0 5px color-mix(in srgb,var(--acc) 40%,transparent))}
+.pay-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.pay-stat{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,.02));box-shadow:var(--shine)}
+.pay-stat strong{font-size:clamp(17px,2.6vw,24px);overflow-wrap:anywhere}
+.pay-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.pay-list{height:320px}
+@media(max-width:760px){.pay-cols{grid-template-columns:1fr}}
+@media(max-width:480px){.pay-stats{grid-template-columns:1fr}}
 </style></head><body>
 <div id="app"></div>
 <script>
@@ -270,7 +277,7 @@ const $=s=>document.querySelector(s),app=$('#app');
 const COLORS=['#1e3a8a','#d97706','#059669','#7c3aed','#e11d48','#0891b2','#be185d','#65a30d','#ea580c','#475569'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-let db,S={days:{}},view=new Date(),sel=null,saveT,userName='',schedEditId=null,currentTheme='dark',currentDateFont='simple',page=null,pendingSchedDel=null,pendingBdayDel=null,calBoxH=null,sessionKey=null,sysNotifOn=true;
+let db,S={days:{}},view=new Date(),sel=null,saveT,userName='',schedEditId=null,currentTheme='dark',currentDateFont='simple',page=null,pendingSchedDel=null,pendingBdayDel=null,calBoxH=null,sessionKey=null,expDate=null,payRange='month',payFrom='',payTo='',payDate='',payCustomOpen=false;
 function setTheme(t){
 currentTheme=t;
 document.documentElement.setAttribute('data-theme',t);
@@ -296,9 +303,10 @@ mem[k]=v;
 if(mode==='idb'){try{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=t.onerror=t.onabort=()=>res();return}catch(e){}}
 if(mode==='ls'){try{localStorage.setItem('pd_'+k,JSON.stringify(v))}catch(e){}}
 res()});
-const writeNow=async()=>{if(!sessionKey)return;try{await put('data',await encryptJSON(sessionKey,S))}catch(e){try{showNotifStack(['⚠️ Could not save your last change.'])}catch(e2){}}};
-const save=()=>{clearTimeout(saveT);saveT=setTimeout(()=>{saveT=null;writeNow()},250)};
-async function flushSave(){if(saveT){clearTimeout(saveT);saveT=null;await writeNow()}}
+const save=()=>{clearTimeout(saveT);saveT=setTimeout(async()=>{
+if(sessionKey){try{put('data',await encryptJSON(sessionKey,S));return}catch(e){}}
+put('data',S);
+},250)};
 /* legacy (v1) password hashing — kept only to verify + upgrade old unencrypted profiles */
 async function hash(pw,salt){
 try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+pw));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
@@ -340,7 +348,6 @@ ${prof?'':'<p><input type="password" id="p2" placeholder="Confirm password" auto
 const err=m=>$('#e').textContent=m;
 const go=async()=>{
 try{
-try{if(sysNotifOn&&'Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}
 const pw=$('#p').value;
 if(prof){
 if(prof.check){
@@ -350,7 +357,7 @@ await decryptJSON(sessionKey,prof.check);
 }catch(e){sessionKey=null;return err('Wrong password. Try again.')}
 const raw=await get('data');
 if(raw&&typeof raw==='object'&&typeof raw.iv==='string'&&typeof raw.ct==='string'){
-try{S=await decryptJSON(sessionKey,raw)}catch(e){sessionKey=null;return err('Could not read your data with this password.')}
+try{S=await decryptJSON(sessionKey,raw)}catch(e){return err('Could not read your data with this password.')}
 }else{
 /* recovers from an upgrade that was interrupted after the profile was re-keyed but before the data finished re-encrypting: the password check above already succeeded, so trust this plain data and encrypt it properly now */
 S=raw||{days:{}};
@@ -380,10 +387,9 @@ await put('data',await encryptJSON(sessionKey,S));
 userName=(prof?prof.name:$('#u').value.trim());
 S.schedule=S.schedule||[];
 S.birthdays=S.birthdays||[];
-sel=null;view=new Date();render();
+sel=null;expDate=null;view=new Date();render();
 checkSchedNotifications();
 checkBirthdayNotifications();
-checkBackupHealth();
 }catch(e){err('Something went wrong: '+e.message)}
 };
 $('#go').onclick=go;
@@ -464,7 +470,6 @@ const header=()=>`<header><div class="row" style="gap:14px"><b>DailyVault</b><sp
 <input type="file" id="importfile" accept="application/json" style="display:none">
 <button id="resetpw">Reset password</button>
 <button id="birthdays">Birthdays</button>
-<button id="sysnotif">System notifications: ${sysNotifOn?'On':'Off'}</button>
 <button id="checkupdate">Check for updates</button>
 <span class="mute">Version ${DV_VERSION} · ● Saved on this device</span>
 <button id="lock" class="danger">Lock</button>
@@ -542,8 +547,7 @@ if(u.protocol!=='https:'||u.host!==base.host)throw new Error('Update file must c
 const h=await fetch(u.href,{cache:'no-store'});
 if(!h.ok)throw new Error('Download failed ('+h.status+')');
 const html=await h.text();
-if(!m.sha256||!/^[0-9a-f]{64}$/i.test(String(m.sha256)))throw new Error('This update has no valid checksum, so it was not installed');
-if((await sha256(html))!==String(m.sha256).toLowerCase())throw new Error('Download is corrupted (checksum mismatch)');
+if(m.sha256&&(await sha256(html))!==String(m.sha256).toLowerCase())throw new Error('Download is corrupted (checksum mismatch)');
 if(!html.includes('DV_VERSION')||!html.includes('DailyVault'))throw new Error('File does not look like a DailyVault build');
 const vm=html.match(/var DV_VERSION=(\d+)/);
 if(!vm||Number(vm[1])!==Number(m.version))throw new Error('Version in file does not match version.json');
@@ -563,59 +567,26 @@ const p=$('#menupanel');if(p)p.classList.add('hidden');
 $('#menubtn')?.setAttribute('aria-expanded','false');
 document.querySelectorAll('.cdrop-list').forEach(l=>{l.classList.add('hidden');const b=l.previousElementSibling;if(b)b.setAttribute('aria-expanded','false')});
 }
-async function downloadBackup(prefix){
+async function exportData(){
 const profile=await get('profile');
 const data=await get('data');
 const payload={app:'DailyVault',version:2,encrypted:true,exportedAt:new Date().toISOString(),profile,data};
 const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
 const url=URL.createObjectURL(blob);
 const a=document.createElement('a');
-a.href=url;a.download=`${prefix}${key(new Date())}.json`;
+a.href=url;a.download=`dailyvault-backup-${key(new Date())}.json`;
 document.body.appendChild(a);a.click();a.remove();
 URL.revokeObjectURL(url);
-}
-async function exportData(){
-await flushSave();
-await downloadBackup('dailyvault-backup-');
-try{await put('lastBackup',Date.now())}catch(e){}
-}
-function validBackup(p){
-if(!p||typeof p!=='object'||!p.data||typeof p.data!=='object')return 'This file is not a valid DailyVault backup.';
-const d=p.data;
-if(typeof d.iv==='string'||typeof d.ct==='string'){
-if(typeof d.iv!=='string'||typeof d.ct!=='string')return 'The backup data is incomplete.';
-try{unb64(d.iv);unb64(d.ct)}catch(e){return 'The backup data is damaged.'}
-}else if(p.encrypted||typeof d.days!=='object'||!d.days)return 'The backup data is incomplete.';
-if(p.profile!==undefined&&p.profile!==null&&(typeof p.profile!=='object'||typeof p.profile.salt!=='string'))return 'The backup profile is damaged.';
-return '';
-}
-async function checkBackupHealth(){
-const msgs=[];
-if(mode==='mem')msgs.push('⚠️ Storage unavailable: data will be lost when the app closes. Export a backup.');
-try{
-const has=Object.keys(S.days||{}).length||(S.schedule||[]).length||(S.birthdays||[]).length;
-const today=key(new Date());
-if(has&&(await get('backupRemindDay'))!==today){
-const last=await get('lastBackup'),age=last?Math.floor((Date.now()-last)/86400000):null;
-if(age===null)msgs.push('💾 No backup yet. Menu → Export backup.');
-else if(age>=30)msgs.push(`💾 Last backup was ${age} days ago. Menu → Export backup.`);
-if(age===null||age>=30)await put('backupRemindDay',today);
-}
-}catch(e){}
-if(msgs.length)showNotifStack(msgs);
 }
 function importDataFile(e){
 const file=e.target.files[0];if(!file)return;
 const reader=new FileReader();
 reader.onload=async()=>{
 try{
-let payload;try{payload=JSON.parse(reader.result)}catch(e2){throw new Error('This file is not a valid DailyVault backup.')}
-const bad=validBackup(payload);if(bad)throw new Error(bad);
-const msg=(payload.encrypted?'This will replace all current data on this device with the contents of this backup. You will need the password that backup was made with to open it afterwards.':'This will replace all current data on this device with the contents of this backup.')+' A safety copy of your current data will be downloaded first. Continue?';
+const payload=JSON.parse(reader.result);
+if(!payload||!payload.data)throw new Error('This file is not a valid DailyVault backup.');
+const msg=payload.encrypted?'This will replace all current data on this device with the contents of this backup. You will need the password that backup was made with to open it afterwards. Continue?':'This will replace all current data on this device with the contents of this backup. Continue?';
 if(!confirm(msg))return;
-await flushSave();
-try{if(await get('data'))await downloadBackup('dailyvault-before-import-')}catch(e2){}
-sessionKey=null;clearTimeout(saveT);saveT=null;
 if(payload.profile)await put('profile',payload.profile);
 await put('data',payload.data);
 alert('Backup restored. Reloading now.');
@@ -631,9 +602,8 @@ updateClock();
 placeNotif();
 $('#clock').onclick=openFullClock;
 $('#menubtn').onclick=e=>{e.stopPropagation();toggleMenu()};
-$('#lock').onclick=async()=>{closeMenu();await flushSave();sessionKey=null;S={days:{}};authScreen()};
+$('#lock').onclick=()=>{closeMenu();sessionKey=null;S={days:{}};authScreen()};
 $('#resetpw').onclick=()=>{closeMenu();openResetPassword()};
-$('#sysnotif').onclick=async()=>{sysNotifOn=!sysNotifOn;await put('sysNotif',sysNotifOn?'on':'off');$('#sysnotif').textContent='System notifications: '+(sysNotifOn?'On':'Off');if(sysNotifOn){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}};
 $('#birthdays').onclick=()=>{closeMenu();pendingBdayDel=null;openBirthdays()};
 $('#checkupdate').onclick=()=>{closeMenu();updModal(`<p>This will connect to the internet to look for a new version.</p><p class="mute">Your planner data is not sent anywhere.</p><div class="row sp"><button id="uc">Cancel</button><button class="primary" id="uok">Continue</button></div>`);$('#uc').onclick=closeModal;$('#uok').onclick=checkForUpdates};
 $('#exportdata').onclick=()=>{closeMenu();exportData()};
@@ -652,7 +622,7 @@ btn.setAttribute('aria-expanded','false');
 };
 wireDrop('theme',setTheme);
 wireDrop('datefont',setDateFont);
-sel?dayView():page==='sched'?schedView():calView();
+expDate?payView():sel?dayView():page==='sched'?schedView():calView();
 }
 /* calendar */
 const SV=p=>`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -850,10 +820,88 @@ sl.style.maxHeight=h+'px';
 });
 }
 window.addEventListener('resize',()=>{if(page==='sched')fixSchedHeight()});
+/* payment history page */
+const money=n=>'₹'+n.toLocaleString('en-IN',{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2});
+const moneyS=n=>(n<0?'−':'')+money(Math.abs(n));
+function payRangeDates(){
+const [Y,M,D]=(payDate||key(new Date())).split('-').map(Number);
+const back=n=>key(new Date(Y,M-1,D-n));
+const to=key(new Date(Y,M-1,D));
+const isToday=to===key(new Date());
+if(payRange==='day')return{from:to,to,label:isToday?'Today':'Selected day'};
+if(payRange==='week')return{from:back(6),to,label:isToday?'Last 7 days':'7 days up to selected date'};
+if(payRange==='month')return{from:back(29),to,label:isToday?'Last 30 days':'30 days up to selected date'};
+if(payRange==='year')return{from:back(364),to,label:isToday?'Last 365 days':'365 days up to selected date'};
+let f=payFrom||back(29),e=payTo||to;if(f>e){const x=f;f=e;e=x}
+return{from:f,to:e,label:'Custom range'};
+}
+function payView(keepScroll){
+const kept=keepScroll?[...document.querySelectorAll('.pay-list')].map(e=>e.scrollTop):[];
+const {from,to,label}=payRangeDates();
+const anchor=payDate||key(new Date());
+const fd=ds=>new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const C=currentTheme==='beach'?{g:'#1f8f52',e:'#c73a2f'}:{g:'#7fd694',e:'#f0665a'};
+const gather=f=>{const out=[];Object.keys(S.days).forEach(k=>{if(k<from||k>to)return;(S.days[k][f]||[]).slice().reverse().forEach(e=>out.push({k,e}))});return out.sort((a,b)=>a.k<b.k?1:a.k>b.k?-1:0)};
+const exps=gather('exp'),gains=gather('gain');
+const tdv=S.days[key(new Date())]||{};
+const todayE=Math.round((tdv.exp||[]).reduce((t,e)=>t+e.a,0)*100)/100,todayG=Math.round((tdv.gain||[]).reduce((t,e)=>t+e.a,0)*100)/100;
+const r2=n=>Math.round(n*100)/100;
+const sumE=r2(exps.reduce((t,x)=>t+x.e.a,0)),sumG=r2(gains.reduce((t,x)=>t+x.e.a,0)),grand=r2(sumG-sumE);
+const row=(x,att,c)=>`<div class="todo"><span>${esc(x.e.f)}<span class="mute" style="display:block;font-size:12px">${fd(x.k)}</span></span><strong style="flex:none;white-space:nowrap;color:${c}">${money(x.e.a)}</strong><button ${att}="${x.e.id}" data-k="${x.k}" aria-label="Delete entry" style="flex:none">✕</button></div>`;
+const form=(p,ph,btn)=>`<div class="row" style="margin-bottom:16px;flex-wrap:wrap"><input type="text" id="${p}a" inputmode="decimal" placeholder="Amount" aria-label="Amount" style="flex:0 1 110px"><input type="text" id="${p}f" placeholder="${ph}" aria-label="${ph}" style="flex:1 1 160px"><button class="primary" id="${p}add">${btn}</button></div>`;
+const tabs=[['day','Day'],['week','Week'],['month','Month'],['year','Year'],['custom','Custom']].map(([r,n])=>`<button data-range="${r}"${payRange===r?' class="primary"':''}>${n}</button>`).join('');
+const rangeText=from===to?fd(from):`${fd(from)} – ${fd(to)}`;
+$('#m').innerHTML=`<div class="row sp" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
+<button id="xback">← Day</button>
+<div class="row" style="flex-wrap:nowrap"><button id="pd" aria-label="Previous day">←</button><input type="date" id="gd" value="${anchor}" style="width:150px"><button id="nd" aria-label="Next day">→</button><button id="tdy">Today</button></div></div>
+<section class="card" style="margin-bottom:20px"><h1 style="font-size:clamp(20px,4vw,32px)">Payment history</h1>
+<div class="row" style="margin-top:16px;gap:8px;min-height:50px">${tabs}${payRange==='custom'&&payCustomOpen?`<span class="row" style="flex-wrap:nowrap;gap:6px;margin-left:8px"><span class="mute">From</span><input type="date" id="pfrom" value="${from}" aria-label="From date" style="width:150px"></span><span class="row" style="flex-wrap:nowrap;gap:6px"><span class="mute">To</span><input type="date" id="pto" value="${to}" aria-label="To date" style="width:150px"></span>`:''}</div>
+<p class="mute" style="margin:12px 0 0;font-size:13px">${label}: ${rangeText}</p>
+<div class="pay-stats"><div class="pay-stat"><span class="mute">Gains total</span><strong style="color:${C.g}">${money(sumG)}</strong></div><div class="pay-stat"><span class="mute">Expenses total</span><strong style="color:${C.e}">${money(sumE)}</strong></div><div class="pay-stat"><span class="mute">Grand total (gains minus expenses)</span><strong style="color:${grand<0?C.e:C.g}">${moneyS(grand)}</strong></div></div></section>
+<div class="pay-cols" style="margin-bottom:20px">
+<section class="card" style="margin-bottom:0"><h2 style="font-size:20px;margin-bottom:14px">Expenses <span id="todayE" title="Today's total" style="font-size:16px;font-weight:600;color:${C.e}">(${money(todayE)})</span></h2>${form('x','What did you spend it on?','Add expense')}
+<h3 style="font-size:15px;margin:0 0 10px">${exps.length} in this range</h3>
+<div class="prio-list pay-list">${exps.map(x=>row(x,'data-xdel',C.e)).join('')||'<p class="mute">No expenses in this range.</p>'}</div></section>
+<section class="card" style="margin-bottom:0"><h2 style="font-size:20px;margin-bottom:14px">Gains <span id="todayG" title="Today's total" style="font-size:16px;font-weight:600;color:${C.g}">(${money(todayG)})</span></h2>${form('g','Where did it come from?','Add gain')}
+<h3 style="font-size:15px;margin:0 0 10px">${gains.length} in this range</h3>
+<div class="prio-list pay-list">${gains.map(x=>row(x,'data-gdel',C.g)).join('')||'<p class="mute">No gains in this range.</p>'}</div></section></div>`;
+document.querySelectorAll('.pay-list').forEach((el,i)=>{if(kept[i])el.scrollTop=kept[i]});
+$('#xback').onclick=()=>{expDate=null;window.scrollTo({top:0,behavior:'auto'});render()};
+const [aY,aM,aD]=anchor.split('-').map(Number);
+$('#pd').onclick=()=>{payDate=key(new Date(aY,aM-1,aD-1));payView()};
+$('#nd').onclick=()=>{payDate=key(new Date(aY,aM-1,aD+1));payView()};
+$('#gd').onchange=()=>{if($('#gd').value){payDate=$('#gd').value;payView()}};
+$('#tdy').onclick=()=>{payDate=key(new Date());payView()};
+document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{
+const r=b.dataset.range;
+if(r==='custom'){
+if(payRange==='custom'){payCustomOpen=!payCustomOpen}
+else{const cur=payRangeDates();payRange='custom';if(!payFrom){payFrom=cur.from;payTo=cur.to}payCustomOpen=true}
+}else{payRange=r;payCustomOpen=false}
+payView()});
+if($('#pfrom')){$('#pfrom').onchange=()=>{if($('#pfrom').value){payFrom=$('#pfrom').value;payView()}};$('#pto').onchange=()=>{if($('#pto').value){payTo=$('#pto').value;payView()}}}
+const addEntry=(kind,p)=>{
+const a=parseFloat($('#'+p+'a').value.replace(/,/g,'')),f=$('#'+p+'f').value.trim();
+if(!(a>0)||!f){showNotifStack(['⚠️ Enter an amount and a note.'],4000);return}
+const dv=day(anchor);dv[kind]=dv[kind]||[];dv[kind].push({id:Date.now()+Math.random(),a:Math.round(a*100)/100,f});
+save();
+if(anchor<from||anchor>to)showNotifStack(['Saved on '+fd(anchor)+', outside the selected range.'],4000);
+payView();$('#'+p+'a').focus();
+};
+[['exp','x'],['gain','g']].forEach(([kind,p])=>{
+$('#'+p+'add').onclick=()=>addEntry(kind,p);
+$('#'+p+'a').onkeydown=$('#'+p+'f').onkeydown=e=>{if(e.key==='Enter')addEntry(kind,p)};
+$('#'+p+'a').oninput=e=>{e.target.value=e.target.value.replace(/[^0-9.,]/g,'')};
+});
+const del=(att,field)=>document.querySelectorAll('['+att+']').forEach(b=>b.onclick=()=>{const dv=S.days[b.dataset.k];dv[field]=(dv[field]||[]).filter(x=>String(x.id)!==b.getAttribute(att));save();payView(true)});
+del('data-xdel','exp');del('data-gdel','gain');
+}
 /* daily page: two sections only */
 function dayView(){
 const [Y,M,D]=sel.split('-').map(Number),dt=new Date(Y,M-1,D),v=day(sel);
 const isPast=sel<key(new Date());
+v.exp=v.exp||[];
+v.gain=v.gain||[];
 const long=dt.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 const item=t=>`<div class="todo ${t.d?'done':''}${t.p?' priority':''}"><input type="checkbox" data-id="${t.id}" ${t.d?'checked':''} aria-label="Complete task"><button class="star-btn" data-star="${t.id}" style="flex:none;padding:4px 9px" aria-label="Toggle priority">${t.p?'★':'☆'}</button><span>${esc(t.t)}</span>${t.d?'':`<button data-edit="${t.id}" style="flex:none;padding:4px 9px" aria-label="Edit task">✎</button>`}<button data-del="${t.id}" aria-label="Delete task">✕</button></div>`;
 const pend=v.todos.filter(t=>!t.d).sort((a,b)=>(b.p-a.p)),done=v.todos.filter(t=>t.d);
@@ -861,8 +909,8 @@ $('#m').innerHTML=`<div class="row sp" style="margin-bottom:16px;flex-wrap:wrap;
 <button id="back">← Calendar</button>
 <div class="row" style="flex-wrap:nowrap"><button id="pd" aria-label="Previous day">←</button><input type="date" id="gd" value="${sel}" style="width:150px"><button id="nd" aria-label="Next day">→</button><button id="tdy">Today</button></div></div>
 <section class="card" style="margin-bottom:20px">
-<div class="row sp" style="flex-wrap:wrap;gap:10px"><h1 style="font-size:clamp(20px,4vw,32px)">${long}${sel===key(new Date())?' <span class="sun" style="position:relative;top:0;right:0;display:inline-block;vertical-align:middle;margin-left:6px" aria-hidden="true"></span>':''}</h1>${(v.todos.length||v.note||v.imgs.length)?'<span class="mute" style="border:1px solid var(--line);border-radius:20px;padding:3px 12px;white-space:nowrap">● Has entries</span>':''}</div>
-<div class="row" style="margin-top:16px;flex-wrap:nowrap"><span class="mute" style="white-space:nowrap">Mark date</span><button id="custom" aria-label="Custom color" style="background:${v.color?v.color:'conic-gradient(from 0deg,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)'};width:32px;height:32px;border-radius:50%;padding:0;flex:none;position:relative;overflow:hidden"></button><button id="nc">Clear</button></div>
+<div class="row sp" style="flex-wrap:wrap;gap:10px"><h1 style="font-size:clamp(20px,4vw,32px)">${long}${sel===key(new Date())?' <span class="sun" style="position:relative;top:0;right:0;display:inline-block;vertical-align:middle;margin-left:6px" aria-hidden="true"></span>':''}</h1>${(v.todos.length||v.note||v.imgs.length||v.exp.length||v.gain.length)?'<span class="mute" style="border:1px solid var(--line);border-radius:20px;padding:3px 12px;white-space:nowrap">● Has entries</span>':''}</div>
+<div class="row" style="margin-top:16px;flex-wrap:wrap;justify-content:space-between;gap:10px"><div class="row" style="flex-wrap:nowrap"><span class="mute" style="white-space:nowrap">Mark date</span><button id="custom" aria-label="Custom color" style="background:${v.color?v.color:'conic-gradient(from 0deg,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)'};width:32px;height:32px;border-radius:50%;padding:0;flex:none;position:relative;overflow:hidden"></button><button id="nc">Clear</button></div><button class="primary" id="xopen" style="margin-left:auto">₹ Payment history</button></div>
 </section>
 <section class="card"><h2 style="font-size:20px;margin-bottom:14px">To-do list</h2>
 <div class="row" style="margin-bottom:14px;flex-wrap:wrap"><input type="text" id="nt" placeholder="${isPast?"Can't add new to-dos on a past date":'Add a task and press Enter'}" ${isPast?'disabled':''} style="flex:1 1 200px${isPast?';opacity:.5':''}"><button class="primary" id="add" ${isPast?'disabled style="opacity:.5;cursor:not-allowed"':''}>Add</button></div>
@@ -881,6 +929,7 @@ $('#pd').onclick=()=>nav(-1);$('#nd').onclick=()=>nav(1);
 document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{v.color=b.dataset.c;save();dayView()});
 $('#nc').onclick=()=>{v.color='';save();dayView()};
 $('#custom').onclick=()=>openHuePicker(v);
+$('#xopen').onclick=()=>{expDate=sel;payDate=sel;window.scrollTo({top:0,behavior:'auto'});render()};
 const add=()=>{if(isPast){showNotifStack(["⛔ Can't add new to-dos on a past date."]);return}const t=$('#nt').value.trim();if(!t)return;v.todos.push({id:Date.now()+Math.random(),t,d:false,p:false});save();dayView();$('#nt').focus()};
 $('#add').onclick=add;$('#nt').onkeydown=e=>{if(e.key==='Enter')add()};
 document.querySelectorAll('[data-id]').forEach(c=>c.onchange=()=>{const t=v.todos.find(x=>String(x.id)===c.dataset.id);t.d=c.checked;save();dayView()});
@@ -898,19 +947,7 @@ inp.onblur=commit;
 });
 $('#note').oninput=e=>{v.note=e.target.value;save()};
 $('#pick').onclick=()=>$('#f').click();
-$('#f').onchange=async e=>{
-const MAXI=10;let skipped=0,failed=0;
-for(const f of e.target.files){
-if(v.imgs.length>=MAXI){skipped++;continue}
-try{v.imgs.push(await shrink(f))}catch(err){failed++}
-}
-save();dayView();
-const msgs=[],mb=imgMB();
-if(skipped)msgs.push(`🖼️ Max ${MAXI} images per day. ${skipped} not added.`);
-if(failed)msgs.push(`⚠️ ${failed} file(s) could not be read as images.`);
-if(mb>=25)msgs.push(`🖼️ Images use ${Math.round(mb)} MB. Saving may slow down; remove old ones.`);
-if(msgs.length)showNotifStack(msgs);
-};
+$('#f').onchange=async e=>{for(const f of e.target.files)v.imgs.push(await shrink(f));save();dayView()};
 document.querySelectorAll('[data-ri]').forEach(b=>b.onclick=()=>{
 const i=+b.dataset.ri;
 showModal(`<h3>Delete this image?</h3><img src="${v.imgs[i]}" alt="" style="height:90px;border-radius:10px;border:1px solid var(--line);margin-bottom:10px"><p class="mute">This permanently removes the image from this day. This cannot be undone.</p><div class="row sp" style="margin-top:14px"><button id="ric">Cancel</button><button class="danger" id="rid">Delete image</button></div>`);
@@ -954,14 +991,13 @@ window.addEventListener('touchmove',move,{passive:true});window.addEventListener
 $('#hcancel').onclick=closeModal;
 $('#happly').onclick=()=>{v.color=curHex;save();closeModal();dayView()};
 }
-function imgMB(){return Object.values(S.days||{}).reduce((n,d)=>n+(d.imgs||[]).reduce((m,x)=>m+x.length,0),0)/1048576}
 async function shrink(file){
 const bmp=await createImageBitmap(file),r=Math.min(1,1200/Math.max(bmp.width,bmp.height));
 const c=document.createElement('canvas');c.width=bmp.width*r;c.height=bmp.height*r;
 c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.8);
 }
 /* birthdays */
-function refreshPage(){sel?dayView():page==='sched'?schedView():calView()}
+function refreshPage(){expDate?payView():sel?dayView():page==='sched'?schedView():calView()}
 function nextOccurrence(dateStr){
 const b=new Date(dateStr+'T00:00:00');
 const now=new Date();now.setHours(0,0,0,0);
@@ -1024,7 +1060,7 @@ msgs.push(`🎂 <b>${esc(b.name)}</b>'s birthday is ${when} (turning ${age})`);
 }
 });
 if(changed)save();
-if(msgs.length){showNotifStack(msgs);sysNotify(msgs)}
+if(msgs.length)showNotifStack(msgs);
 }
 function checkSchedNotifications(){
 S.schedule=S.schedule||[];
@@ -1043,14 +1079,7 @@ msgs.push(`${it.type==='work'?'💼':'📅'} <b>${esc(it.title)}</b> is schedule
 }
 });
 if(changed)save();
-if(msgs.length){showNotifStack(msgs);sysNotify(msgs)}
-}
-function sysNotify(msgs){
-if(!sysNotifOn)return;
-try{
-if(!('Notification' in window)||Notification.permission!=='granted')return;
-msgs.forEach(m=>{try{new Notification('DailyVault',{body:new DOMParser().parseFromString(String(m),'text/html').body.textContent})}catch(e){}});
-}catch(e){}
+if(msgs.length)showNotifStack(msgs);
 }
 let notifBox=null;
 function placeNotif(){
@@ -1059,16 +1088,19 @@ const slot=document.getElementById('notifslot');
 if(slot){notifBox.style.cssText='display:flex;flex-direction:row;gap:8px;width:100%;max-width:640px;height:32px;overflow:hidden';if(notifBox.parentNode!==slot)slot.appendChild(notifBox)}
 else{notifBox.style.cssText='position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:14px;z-index:80;display:flex;flex-direction:column;gap:8px;max-width:320px;width:calc(100% - 28px)';if(notifBox.parentNode!==document.body)document.body.appendChild(notifBox)}
 }
-function showNotifStack(msgs){
+function showNotifStack(msgs,ms){
 if(!notifBox){notifBox=document.createElement('div');notifBox.id='notifstack'}
 placeNotif();const box=notifBox;
 msgs.forEach(m=>{
+const plain=String(m).replace(/<[^>]*>/g,'');
+if([...box.children].some(c=>c.title===plain))return;
 const card=document.createElement('div');
-card.className='card';card.title=String(m).replace(/<[^>]*>/g,'');
+card.className='card';card.title=plain;
 card.style.cssText='margin:0;padding:8px 12px;display:flex;gap:10px;align-items:flex-start;box-shadow:0 8px 24px rgba(0,0,0,.6)';
 card.innerHTML=`<span style="flex:1;font-size:13px;line-height:1.4">${m}</span><button style="flex:none;padding:2px 8px" aria-label="Dismiss">✕</button>`;
 card.querySelector('button').onclick=()=>card.remove();
 box.appendChild(card);
+if(ms)setTimeout(()=>card.remove(),ms);
 });
 }
 document.addEventListener('click',e=>{
@@ -1078,16 +1110,12 @@ if(!e.target.closest('.cdrop'))document.querySelectorAll('.cdrop-list').forEach(
 /* ---- Auto-lock after 5 minutes of inactivity (same as the Lock button) ---- */
 const IDLE_LOCK_MS=5*60*1000;let lastActivity=Date.now();
 ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(ev=>document.addEventListener(ev,()=>{lastActivity=Date.now()},{passive:true,capture:true}));
-setInterval(async()=>{
+setInterval(()=>{
 if(!document.getElementById('lock'))return;
 if(Date.now()-lastActivity<IDLE_LOCK_MS)return;
 closeModal();if(notifBox)notifBox.innerHTML='';
-await flushSave();
 sessionKey=null;S={days:{}};authScreen();openFullClock();
 },10000);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)flushSave()});
-/* re-check reminders every 30 min while unlocked (covers a day change); each reminder is only shown once per day */
-setInterval(()=>{if(!document.getElementById('lock'))return;checkSchedNotifications();checkBirthdayNotifications()},30*60*1000);
 (async()=>{
 try{db=await idb();mode='idb'}catch(e){try{localStorage.setItem('pd_t','1');localStorage.removeItem('pd_t');mode='ls'}catch(e2){mode='mem'}}
 if((await get('wipeVersion'))!=='v1'){
@@ -1097,7 +1125,6 @@ await put('wipeVersion','v1');
 }
 currentTheme=(await get('theme'))||'dark';
 document.documentElement.setAttribute('data-theme',currentTheme);
-sysNotifOn=(await get('sysNotif'))!=='off';
 currentDateFont=(await get('dateFont'))||'simple';
 document.documentElement.setAttribute('data-datefont',currentDateFont);
 authScreen();
