@@ -5,7 +5,7 @@
 
 <script>
 /* ---- DailyVault updater: boot loader (runs before the app) ---- */
-var DV_VERSION=20; /* version of THIS file. Bump it for every release. */
+var DV_VERSION=21; /* version of THIS file. Bump it for every release. */
 (function(){
 if(window.__dvLoaded)return;
 try{
@@ -273,6 +273,8 @@ main{max-width:1280px;margin:0 auto;padding:28px 20px 60px}
 </style></head><body>
 <div id="app"></div>
 <script>
+/* apply the saved theme before first paint (no flash of the default theme) */
+try{const t=localStorage.getItem('dv_theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}
 const $=s=>document.querySelector(s),app=$('#app');
 const COLORS=['#1e3a8a','#d97706','#059669','#7c3aed','#e11d48','#0891b2','#be185d','#65a30d','#ea580c','#475569'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -280,6 +282,7 @@ const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 let db,S={days:{}},view=new Date(),sel=null,saveT,userName='',schedEditId=null,currentTheme='dark',currentDateFont='simple',page=null,pendingSchedDel=null,pendingBdayDel=null,calBoxH=null,sessionKey=null,expDate=null,payRange='month',payFrom='',payTo='',payDate='',payCustomOpen=false;
 function setTheme(t){
 currentTheme=t;
+try{localStorage.setItem('dv_theme',t)}catch(e){}
 document.documentElement.setAttribute('data-theme',t);
 put('theme',t);
 }
@@ -336,10 +339,12 @@ const check=await encryptJSON(key,{ok:true});
 return {profile:{name,salt,iterations:PBKDF2_ITER,check},key};
 }
 /* auth screen */
-async function authScreen(){
-const prof=await get('profile');
-app.innerHTML=`<div class="auth"><h1 style="display:flex;align-items:center;gap:12px"><span style="width:40px;height:40px;border-radius:11px;flex:none;background-image:url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2RmZjBlZSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjQ1JSIgc3RvcC1jb2xvcj0iIzhmZDNkNiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwZjdjOGEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InN1biIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZlM2E4Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2UwYTQ1OCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icGFnZSIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2YyZmJmYSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxjbGlwUGF0aCBpZD0icm91bmQiPgogICAgICA8cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgcng9IjQ0Ii8+CiAgICA8L2NsaXBQYXRoPgogIDwvZGVmcz4KCiAgPGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kKSI+CiAgICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0idXJsKCNiZykiLz4KCiAgICA8IS0tIHN1biAtLT4KICAgIDxjaXJjbGUgY3g9IjE1MCIgY3k9IjUyIiByPSIyNiIgZmlsbD0idXJsKCNzdW4pIi8+CgogICAgPCEtLSBkaXN0YW50IHdhdmVzIC0tPgogICAgPHBhdGggZD0iTTAgOTYgUSAyNSA4NiA1MCA5NiBUIDEwMCA5NiBUIDE1MCA5NiBUIDIwMCA5NiBWMjAwIEgwIFoiIGZpbGw9IiNlYWY4ZjUiIG9wYWNpdHk9IjAuNSIvPgoKICAgIDwhLS0gY2FsZW5kYXIgLyBqb3VybmFsIGNhcmQgLS0+CiAgICA8Zz4KICAgICAgPHJlY3QgeD0iMzgiIHk9Ijc4IiB3aWR0aD0iMTI0IiBoZWlnaHQ9IjEwNCIgcng9IjE0IiBmaWxsPSJ1cmwoI3BhZ2UpIiBzdHJva2U9IiMwYTRhNTIiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8IS0tIGJpbmRlciByaW5ncyAtLT4KICAgICAgPHJlY3QgeD0iNjIiIHk9IjY2IiB3aWR0aD0iMTAiIGhlaWdodD0iMjQiIHJ4PSI1IiBmaWxsPSIjMGE0YTUyIi8+CiAgICAgIDxyZWN0IHg9IjEyOCIgeT0iNjYiIHdpZHRoPSIxMCIgaGVpZ2h0PSIyNCIgcng9IjUiIGZpbGw9IiMwYTRhNTIiLz4KICAgICAgPCEtLSBoZWFkZXIgc3RyaXAgLS0+CiAgICAgIDxyZWN0IHg9IjM4IiB5PSI3OCIgd2lkdGg9IjEyNCIgaGVpZ2h0PSIyNiIgcng9IjE0IiBmaWxsPSIjMGY3YzhhIi8+CiAgICAgIDxyZWN0IHg9IjM4IiB5PSI5MiIgd2lkdGg9IjEyNCIgaGVpZ2h0PSIxMiIgZmlsbD0iIzBmN2M4YSIvPgoKICAgICAgPCEtLSBjaGVja2xpc3QgbGluZXMgLS0+CiAgICAgIDxjaXJjbGUgY3g9IjU4IiBjeT0iMTI2IiByPSI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMwZjdjOGEiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8cGF0aCBkPSJNNTUgMTI2IGwyIDMgbDUgLTYiIHN0cm9rZT0iIzBmN2M4YSIgc3Ryb2tlLXdpZHRoPSIyLjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgogICAgICA8cmVjdCB4PSI3MiIgeT0iMTIyIiB3aWR0aD0iNzIiIGhlaWdodD0iOCIgcng9IjQiIGZpbGw9IiNjZGU4ZTYiLz4KCiAgICAgIDxjaXJjbGUgY3g9IjU4IiBjeT0iMTQ4IiByPSI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMwZjdjOGEiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8cmVjdCB4PSI3MiIgeT0iMTQ0IiB3aWR0aD0iNTgiIGhlaWdodD0iOCIgcng9IjQiIGZpbGw9IiNjZGU4ZTYiLz4KCiAgICAgIDxjaXJjbGUgY3g9IjU4IiBjeT0iMTcwIiByPSI1IiBmaWxsPSIjZTBhNDU4IiBzdHJva2U9IiNlMGE0NTgiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8cGF0aCBkPSJNNTUgMTcwIGwyIDMgbDUgLTYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgogICAgICA8cmVjdCB4PSI3MiIgeT0iMTY2IiB3aWR0aD0iNDgiIGhlaWdodD0iOCIgcng9IjQiIGZpbGw9IiNjZGU4ZTYiLz4KICAgIDwvZz4KCiAgICA8IS0tIGZvcmVncm91bmQgd2F2ZSAtLT4KICAgIDxwYXRoIGQ9Ik0wIDE3NiBRIDIwIDE2NiA0MCAxNzYgVCA4MCAxNzYgVCAxMjAgMTc2IFQgMTYwIDE3NiBUIDIwMCAxNzYgVjIwMCBIMCBaIiBmaWxsPSIjMGY3YzhhIi8+CiAgICA8cGF0aCBkPSJNMCAxODYgUSAyNSAxNzggNTAgMTg2IFQgMTAwIDE4NiBUIDE1MCAxODYgVCAyMDAgMTg2IFYyMDAgSDAgWiIgZmlsbD0iIzBhNGE1MiIvPgogIDwvZz4KPC9zdmc+Cg==');background-size:cover;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 2px 6px rgba(10,70,75,.35)"></span>DailyVault</h1>
-<p class="mute">${prof?'Welcome back, '+esc(prof.name)+'. Enter your password to open your planner.':'Create your offline profile. It stays on this device only.'}</p>
+const AUTH_HEAD=`<div class="auth"><h1 style="display:flex;align-items:center;gap:12px"><span style="width:40px;height:40px;border-radius:11px;flex:none;background-image:url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2RmZjBlZSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjQ1JSIgc3RvcC1jb2xvcj0iIzhmZDNkNiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwZjdjOGEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InN1biIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZlM2E4Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2UwYTQ1OCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icGFnZSIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2YyZmJmYSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxjbGlwUGF0aCBpZD0icm91bmQiPgogICAgICA8cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgcng9IjQ0Ii8+CiAgICA8L2NsaXBQYXRoPgogIDwvZGVmcz4KCiAgPGcgY2xpcC1wYXRoPSJ1cmwoI3JvdW5kKSI+CiAgICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0idXJsKCNiZykiLz4KCiAgICA8IS0tIHN1biAtLT4KICAgIDxjaXJjbGUgY3g9IjE1MCIgY3k9IjUyIiByPSIyNiIgZmlsbD0idXJsKCNzdW4pIi8+CgogICAgPCEtLSBkaXN0YW50IHdhdmVzIC0tPgogICAgPHBhdGggZD0iTTAgOTYgUSAyNSA4NiA1MCA5NiBUIDEwMCA5NiBUIDE1MCA5NiBUIDIwMCA5NiBWMjAwIEgwIFoiIGZpbGw9IiNlYWY4ZjUiIG9wYWNpdHk9IjAuNSIvPgoKICAgIDwhLS0gY2FsZW5kYXIgLyBqb3VybmFsIGNhcmQgLS0+CiAgICA8Zz4KICAgICAgPHJlY3QgeD0iMzgiIHk9Ijc4IiB3aWR0aD0iMTI0IiBoZWlnaHQ9IjEwNCIgcng9IjE0IiBmaWxsPSJ1cmwoI3BhZ2UpIiBzdHJva2U9IiMwYTRhNTIiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8IS0tIGJpbmRlciByaW5ncyAtLT4KICAgICAgPHJlY3QgeD0iNjIiIHk9IjY2IiB3aWR0aD0iMTAiIGhlaWdodD0iMjQiIHJ4PSI1IiBmaWxsPSIjMGE0YTUyIi8+CiAgICAgIDxyZWN0IHg9IjEyOCIgeT0iNjYiIHdpZHRoPSIxMCIgaGVpZ2h0PSIyNCIgcng9IjUiIGZpbGw9IiMwYTRhNTIiLz4KICAgICAgPCEtLSBoZWFkZXIgc3RyaXAgLS0+CiAgICAgIDxyZWN0IHg9IjM4IiB5PSI3OCIgd2lkdGg9IjEyNCIgaGVpZ2h0PSIyNiIgcng9IjE0IiBmaWxsPSIjMGY3YzhhIi8+CiAgICAgIDxyZWN0IHg9IjM4IiB5PSI5MiIgd2lkdGg9IjEyNCIgaGVpZ2h0PSIxMiIgZmlsbD0iIzBmN2M4YSIvPgoKICAgICAgPCEtLSBjaGVja2xpc3QgbGluZXMgLS0+CiAgICAgIDxjaXJjbGUgY3g9IjU4IiBjeT0iMTI2IiByPSI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMwZjdjOGEiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8cGF0aCBkPSJNNTUgMTI2IGwyIDMgbDUgLTYiIHN0cm9rZT0iIzBmN2M4YSIgc3Ryb2tlLXdpZHRoPSIyLjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgogICAgICA8cmVjdCB4PSI3MiIgeT0iMTIyIiB3aWR0aD0iNzIiIGhlaWdodD0iOCIgcng9IjQiIGZpbGw9IiNjZGU4ZTYiLz4KCiAgICAgIDxjaXJjbGUgY3g9IjU4IiBjeT0iMTQ4IiByPSI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMwZjdjOGEiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8cmVjdCB4PSI3MiIgeT0iMTQ0IiB3aWR0aD0iNTgiIGhlaWdodD0iOCIgcng9IjQiIGZpbGw9IiNjZGU4ZTYiLz4KCiAgICAgIDxjaXJjbGUgY3g9IjU4IiBjeT0iMTcwIiByPSI1IiBmaWxsPSIjZTBhNDU4IiBzdHJva2U9IiNlMGE0NTgiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgICA8cGF0aCBkPSJNNTUgMTcwIGwyIDMgbDUgLTYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgogICAgICA8cmVjdCB4PSI3MiIgeT0iMTY2IiB3aWR0aD0iNDgiIGhlaWdodD0iOCIgcng9IjQiIGZpbGw9IiNjZGU4ZTYiLz4KICAgIDwvZz4KCiAgICA8IS0tIGZvcmVncm91bmQgd2F2ZSAtLT4KICAgIDxwYXRoIGQ9Ik0wIDE3NiBRIDIwIDE2NiA0MCAxNzYgVCA4MCAxNzYgVCAxMjAgMTc2IFQgMTYwIDE3NiBUIDIwMCAxNzYgVjIwMCBIMCBaIiBmaWxsPSIjMGY3YzhhIi8+CiAgICA8cGF0aCBkPSJNMCAxODYgUSAyNSAxNzggNTAgMTg2IFQgMTAwIDE4NiBUIDE1MCAxODYgVCAyMDAgMTg2IFYyMDAgSDAgWiIgZmlsbD0iIzBhNGE1MiIvPgogIDwvZz4KPC9zdmc+Cg==');background-size:cover;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 2px 6px rgba(10,70,75,.35)"></span>DailyVault</h1>`;
+/* paints the login card immediately so the window is never an empty screen while storage opens */
+function authShell(){app.innerHTML=AUTH_HEAD+'<p class="mute">Opening…</p></div>'}
+async function authScreen(...pre){
+const prof=pre.length?pre[0]:await get('profile');
+app.innerHTML=AUTH_HEAD+`<p class="mute">${prof?'Welcome back, '+esc(prof.name)+'. Enter your password to open your planner.':'Create your offline profile. It stays on this device only.'}</p>
 ${prof?'':'<p><input type="text" id="u" placeholder="User name" autocomplete="username"></p>'}
 <p><input type="password" id="p" placeholder="${prof?'Password':'Create password'}" autocomplete="${prof?'current-password':'new-password'}"></p>
 ${prof?'':'<p><input type="password" id="p2" placeholder="Confirm password" autocomplete="new-password"></p>'}
@@ -1119,17 +1124,21 @@ closeModal();if(notifBox)notifBox.innerHTML='';
 sessionKey=null;S={days:{}};authScreen();openFullClock();
 },10000);
 (async()=>{
+authShell();
 try{db=await idb();mode='idb'}catch(e){try{localStorage.setItem('pd_t','1');localStorage.removeItem('pd_t');mode='ls'}catch(e2){mode='mem'}}
-if((await get('wipeVersion'))!=='v1'){
-await put('profile',undefined);
-await put('data',undefined);
-await put('wipeVersion','v1');
+/* one parallel batch instead of four reads in a row */
+const [wv,th,df,loadedProf]=await Promise.all([get('wipeVersion'),get('theme'),get('dateFont'),get('profile')]);
+let prof=loadedProf;
+if(wv!=='v1'){
+await Promise.all([put('profile',undefined),put('data',undefined),put('wipeVersion','v1')]);
+prof=undefined;
 }
-currentTheme=(await get('theme'))||'dark';
+currentTheme=th||'dark';
 document.documentElement.setAttribute('data-theme',currentTheme);
-currentDateFont=(await get('dateFont'))||'simple';
+try{localStorage.setItem('dv_theme',currentTheme)}catch(e){}
+currentDateFont=df||'simple';
 document.documentElement.setAttribute('data-datefont',currentDateFont);
-authScreen();
+authScreen(prof);
 try{localStorage.setItem('dv_ok',String(DV_VERSION))}catch(e){}
 })();
 </script></body></html>

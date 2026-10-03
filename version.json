@@ -1,1 +1,1 @@
-{ "version": 20, "url": "DailyVault.html", "notes": "Expense and Gain lists show only entries of the selected date; top boxes still total the selected range" }
+{ "version": 21, "url": "DailyVault.html", "notes": "Faster loading: login screen shows instantly instead of a blank screen, startup reads run in parallel" }
